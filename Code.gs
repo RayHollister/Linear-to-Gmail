@@ -12,6 +12,7 @@ const LINEAR_API_ENDPOINT = "https://api.linear.app/graphql";
 const USER_PROPS = PropertiesService.getUserProperties();
 const PROP_API_KEY = "LINEAR_API_KEY";
 const PROP_DEFAULT_TEAM_ID = "LINEAR_DEFAULT_TEAM_ID";
+const PROP_DEFAULT_PRIORITY = "LINEAR_DEFAULT_PRIORITY";
 
 /** Entry points **/
 function onHomepage(e) {
@@ -101,6 +102,7 @@ function buildIssueComposerCard_(msg) {
     .setValue(buildDefaultDescription_(msg))
     .setMultiline(true);
   const teamInput = buildTeamTypeaheadWidget_();
+  const priorityInput = buildPrioritySelector_(); // Create the priority selector
 
   // Pass message/thread IDs to the action as parameters
   const createAction = CardService.newAction()
@@ -128,6 +130,7 @@ function buildIssueComposerCard_(msg) {
     );
   }
 
+  mainSection.addWidget(priorityInput); // Add priority selector to the card
   mainSection.addWidget(createBtn);
 
   return CardService.newCardBuilder()
@@ -189,7 +192,8 @@ function handleCreateIssue_(e) {
   const title = getSingleValue_(inputs, "title");
   const description = getSingleValue_(inputs, "description");
   const teamQuery = getSingleValue_(inputs, "teamQuery");
-  // user-typed team
+  const priority = getSingleValue_(inputs, "priority"); // Get priority value
+
   const messageId = params.messageId;
   const threadId = params.threadId;
   if (!getApiKey_()) return buildSettingsCard_("Add your API key to continue.");
@@ -198,7 +202,6 @@ function handleCreateIssue_(e) {
 
   // Resolve team
   const teams = safeFetchTeams_();
-  // already sorted
   const resolvedTeamId = resolveTeamIdByQuery_(teams, teamQuery) || getDefaultTeamId_();
   if (!resolvedTeamId) {
     return buildErrorCard_("Could not resolve a team from your input. Try typing the exact team name or key.");
@@ -210,12 +213,16 @@ function handleCreateIssue_(e) {
     const headerBlock = buildHeaderBlock_(msg, emailUrl);
     const finalDesc = headerBlock + "\n\n" + (description || "").trim();
 
-    const result = linearCreateIssue_(resolvedTeamId, title, finalDesc);
+    const priorityInt = parseInt(priority, 10);
+    const result = linearCreateIssue_(resolvedTeamId, title, finalDesc, priorityInt);
     const url = result?.data?.issueCreate?.issue?.url;
     if (!url) throw new Error("Missing Linear URL in response.");
 
-    // --- SAVE THE LAST USED TEAM ID ---
+    // --- SAVE THE LAST USED TEAM AND PRIORITY ---
     USER_PROPS.setProperty(PROP_DEFAULT_TEAM_ID, resolvedTeamId);
+    if (!isNaN(priorityInt)) {
+      USER_PROPS.setProperty(PROP_DEFAULT_PRIORITY, priorityInt);
+    }
 
     const success = CardService.newCardSection()
       .addWidget(CardService.newKeyValue().setTopLabel("Success").setContent("Issue created"))
@@ -277,15 +284,13 @@ function getSingleValue_(inputs, name) {
 /** Helpers – Team input & resolution **/
 function buildTeamTypeaheadWidget_() {
   try {
-    const teams = linearFetchTeams_(); // sorted
+    const teams = linearFetchTeams_();
     if (!teams.length) return null;
 
-    // --- GET THE LAST-USED TEAM ---
     const defaultTeamId = getDefaultTeamId_();
     const defaultTeam = teams.find(t => t.id === defaultTeamId);
     const defaultValue = defaultTeam ? defaultTeam.name : "";
 
-    // Build suggestions from names and keys (deduped, in sorted team order)
     const seen = {};
     const suggestions = [];
     teams.forEach(t => {
@@ -321,6 +326,21 @@ function buildTeamTypeaheadWidget_() {
     return null;
   }
 }
+
+function buildPrioritySelector_() {
+  const lastPriority = USER_PROPS.getProperty(PROP_DEFAULT_PRIORITY) || "0"; // Default to "0" (No Priority)
+
+  return CardService.newSelectionInput()
+    .setFieldName("priority")
+    .setTitle("Priority")
+    .setType(CardService.SelectionInputType.DROPDOWN)
+    .addItem("No priority", "0", lastPriority === "0")
+    .addItem("Urgent", "1", lastPriority === "1")
+    .addItem("High", "2", lastPriority === "2")
+    .addItem("Medium", "3", lastPriority === "3")
+    .addItem("Low", "4", lastPriority === "4");
+}
+
 
 function safeFetchTeams_() {
   try {
@@ -363,7 +383,7 @@ function linearFetchTeams_() {
   return sortTeams_(nodes);
 }
 
-function linearCreateIssue_(teamId, title, description) {
+function linearCreateIssue_(teamId, title, description, priority) {
   const mutation = `
     mutation CreateIssue($input: IssueCreateInput!) {
       issueCreate(input: $input) {
@@ -373,6 +393,11 @@ function linearCreateIssue_(teamId, title, description) {
     }
   `;
   const input = { teamId, title, description };
+  // Only add priority to the input if it's a valid number and not "No Priority" (0)
+  if (!isNaN(priority) && priority > 0) {
+    input.priority = priority;
+  }
+  
   return linearRequest_(mutation, { input });
 }
 
