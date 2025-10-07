@@ -92,10 +92,9 @@ function buildIssueComposerCard_(msg) {
 
   // Create and style the "Create issue" button
   const createBtn = CardService.newTextButton()
-    .setText("Create issue in Linear") // Set text color to white
+    .setText("<b>Create issue in Linear</b>")
     .setOnClickAction(createAction)
     .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
-    // .setBackgroundColor("#5E6AD2"); 
 
   const settingsNav = CardService.newTextButton()
     .setText("Settings")
