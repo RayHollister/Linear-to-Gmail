@@ -1,11 +1,9 @@
-/* Linear for Gmail – Apps Script Add-on
- * - Team input is a type-ahead TextInput (name/key/id), teams sorted A→Z
- * - Gmail link block appears at the TOP of the issue description
- * - Authorization header uses raw Linear API key (no "Bearer ")
- * - Message/thread IDs passed via action parameters
- * - UI: "Create issue in Linear" stays inline under the form
- * - UI: "Settings" pinned to the bottom via Fixed Footer (with graceful fallback)
- */
+/***** Linear for Gmail – Apps Script Add-on (type-ahead teams, sorted)
+ * - Team suggestions are sorted: name (A→Z, case-insensitive), then key
+ * - Type-ahead accepts team name, key, or id; resolves to teamId on submit
+ * - No "Bearer " prefix in Authorization header (Linear API expects raw key)
+ * - Hidden inputs removed; message/thread IDs passed via action parameters
+ *************************************************/
 
 /** Constants **/
 const LINEAR_API_ENDPOINT = "https://api.linear.app/graphql";
@@ -57,9 +55,7 @@ function buildSettingsCard_(subtitle) {
     .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
 
   const refreshTeamsAction = CardService.newAction().setFunctionName("handleRefreshTeams_");
-  const refreshBtn = CardService.newTextButton()
-    .setText("Refresh teams")
-    .setOnClickAction(refreshTeamsAction);
+  const refreshBtn = CardService.newTextButton().setText("Refresh teams").setOnClickAction(refreshTeamsAction);
 
   const section = CardService.newCardSection()
     .addWidget(apiKeyInput)
@@ -104,6 +100,10 @@ function buildIssueComposerCard_(msg) {
     .setOnClickAction(createAction)
     .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
 
+  const settingsNav = CardService.newTextButton()
+    .setText("Settings")
+    .setOnClickAction(CardService.newAction().setFunctionName("handleNavSettings_"));
+
   const section = CardService.newCardSection()
     .addWidget(titleInput)
     .addWidget(descInput);
@@ -118,41 +118,12 @@ function buildIssueComposerCard_(msg) {
     );
   }
 
-  // Keep Create button inline in the form
-  section.addWidget(createBtn);
+  section.addWidget(createBtn).addWidget(settingsNav);
 
-  // Build the card and attach a Fixed Footer for Settings; otherwise inline fallback
-  const builder = CardService.newCardBuilder()
+  return CardService.newCardBuilder()
     .setHeader(header)
-    .addSection(section);
-
-  if (supportsFixedFooter_()) {
-    const footer = CardService.newFixedFooter()
-      .setSecondaryButton(
-        CardService.newTextButton()
-          .setText("Settings")
-          .setOnClickAction(CardService.newAction().setFunctionName("handleNavSettings_"))
-      );
-    builder.setFixedFooter(footer);
-  } else {
-    // Fallback for environments that don't support Fixed Footer
-    section.addWidget(
-      CardService.newTextButton()
-        .setText("Settings")
-        .setOnClickAction(CardService.newAction().setFunctionName("handleNavSettings_"))
-    );
-  }
-
-  return builder.build();
-}
-
-function supportsFixedFooter_() {
-  try {
-    const _ = CardService.newFixedFooter();
-    return !!_;
-  } catch (e) {
-    return false;
-  }
+    .addSection(section)
+    .build();
 }
 
 function buildSimpleCard_(title, subtitle) {
@@ -176,7 +147,7 @@ function handleSaveSettings_(e) {
   }
   USER_PROPS.setProperty(PROP_API_KEY, apiKey);
   try {
-    const teams = linearFetchTeams_();
+    const teams = linearFetchTeams_(); // already sorted
     if (teams.length) USER_PROPS.setProperty(PROP_DEFAULT_TEAM_ID, teams[0].id);
     return buildSettingsCard_("Saved. Loaded " + teams.length + " team(s).");
   } catch (err) {
@@ -186,7 +157,7 @@ function handleSaveSettings_(e) {
 
 function handleRefreshTeams_(e) {
   try {
-    const teams = linearFetchTeams_();
+    const teams = linearFetchTeams_(); // already sorted
     if (teams.length && !getDefaultTeamId_()) {
       USER_PROPS.setProperty(PROP_DEFAULT_TEAM_ID, teams[0].id);
     }
@@ -206,7 +177,7 @@ function handleCreateIssue_(e) {
 
   const title = getSingleValue_(inputs, "title");
   const description = getSingleValue_(inputs, "description");
-  const teamQuery = getSingleValue_(inputs, "teamQuery");
+  const teamQuery = getSingleValue_(inputs, "teamQuery"); // user-typed team
   const messageId = params.messageId;
   const threadId = params.threadId;
 
@@ -215,7 +186,7 @@ function handleCreateIssue_(e) {
   if (!messageId || !threadId) return buildErrorCard_("Missing message context.");
 
   // Resolve team
-  const teams = safeFetchTeams_();
+  const teams = safeFetchTeams_(); // already sorted
   const resolvedTeamId = resolveTeamIdByQuery_(teams, teamQuery) || getDefaultTeamId_();
   if (!resolvedTeamId) {
     return buildErrorCard_("Could not resolve a team from your input. Try typing the exact team name or key.");
@@ -224,8 +195,6 @@ function handleCreateIssue_(e) {
   try {
     const msg = GmailApp.getMessageById(messageId);
     const emailUrl = buildGmailPermalink_(threadId);
-
-    // Gmail link block at the top
     const headerBlock = buildHeaderBlock_(msg, emailUrl);
     const finalDesc = headerBlock + "\n\n" + (description || "").trim();
 
@@ -233,15 +202,13 @@ function handleCreateIssue_(e) {
     const url = result?.data?.issueCreate?.issue?.url;
     if (!url) throw new Error("Missing Linear URL in response.");
 
-    const successHeader = CardService.newCardHeader().setTitle("Linear issue created");
-
     const success = CardService.newCardSection()
       .addWidget(CardService.newKeyValue().setTopLabel("Success").setContent("Issue created"))
       .addWidget(CardService.newTextButton().setText("Open in Linear").setOpenLink(CardService.newOpenLink().setUrl(url)))
       .addWidget(CardService.newTextButton().setText("Open this email in Gmail").setOpenLink(CardService.newOpenLink().setUrl(emailUrl)));
 
     return CardService.newCardBuilder()
-      .setHeader(successHeader)
+      .setHeader(CardService.newCardHeader().setTitle("Linear issue created"))
       .addSection(success)
       .build();
   } catch (err) {
@@ -277,7 +244,6 @@ function buildDefaultDescription_(msg) {
   return [msg.plainBody || ""].join("\n").trim();
 }
 
-// Gmail link block at top of description
 function buildHeaderBlock_(gmailMessage, emailUrl) {
   return [
     "**Created from Gmail**",
@@ -300,6 +266,7 @@ function buildTeamTypeaheadWidget_() {
     const teams = linearFetchTeams_(); // sorted
     if (!teams.length) return null;
 
+    // Build suggestions from names and keys (deduped, in sorted team order)
     const seen = {};
     const suggestions = [];
     teams.forEach(t => {
@@ -316,14 +283,16 @@ function buildTeamTypeaheadWidget_() {
     });
 
     const sugg = CardService.newSuggestions();
-    suggestions.slice(0, 100).forEach(s => sugg.addSuggestion(s));
+    suggestions.slice(0, 100).forEach(s => sugg.addSuggestion(s)); // preserve sorted order
 
     const hint = "Type team name, key (e.g., ENG) or paste team ID";
-    return CardService.newTextInput()
+    const input = CardService.newTextInput()
       .setFieldName("teamQuery")
       .setTitle("Team")
       .setHint(hint)
       .setSuggestions(sugg);
+
+    return input;
   } catch (err) {
     return null;
   }
