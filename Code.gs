@@ -99,7 +99,7 @@ function buildIssueComposerCard_(msg) {
   const descInput = CardService.newTextInput()
     .setFieldName("description")
     .setTitle("Description")
-    .setValue(buildDefaultDescription_(msg))
+    .setValue("") // Make the description field blank by default
     .setMultiline(true);
   const teamInput = buildTeamTypeaheadWidget_();
   const priorityInput = buildPrioritySelector_(); // Create the priority selector
@@ -190,9 +190,9 @@ function handleCreateIssue_(e) {
   const inputs = e.commonEventObject.formInputs || {};
   const params = e.commonEventObject.parameters || {};
   const title = getSingleValue_(inputs, "title");
-  const description = getSingleValue_(inputs, "description");
+  const userDescription = getSingleValue_(inputs, "description"); // This is the user-typed text
   const teamQuery = getSingleValue_(inputs, "teamQuery");
-  const priority = getSingleValue_(inputs, "priority"); // Get priority value
+  const priority = getSingleValue_(inputs, "priority");
 
   const messageId = params.messageId;
   const threadId = params.threadId;
@@ -210,9 +210,18 @@ function handleCreateIssue_(e) {
   try {
     const msg = GmailApp.getMessageById(messageId);
     const emailUrl = buildGmailPermalink_(threadId);
-    // Add blockquote formatting to the description
+
+    // Build the email body part
+    const emailBody = htmlToMarkdown_(msg.getBody());
+    const emailBodyBlock = `> ${emailBody.replace(/\n/g, '\n> ')}`;
+
+    // Build the header part
     const headerBlock = `**Created from Gmail**\n**Subject:** [${msg.getSubject()}](${emailUrl})`;
-    const finalDesc = `${headerBlock}\n\n> ${description.replace(/\n/g, '\n> ')}`;
+
+    // Assemble the final description in the correct order
+    const finalDesc = [userDescription, headerBlock, emailBodyBlock]
+      .filter(Boolean) // Remove any empty parts (like if the user doesn't add a description)
+      .join('\n\n');
 
     const priorityInt = parseInt(priority, 10);
     const result = linearCreateIssue_(resolvedTeamId, title, finalDesc, priorityInt);
@@ -263,7 +272,8 @@ function safeSubject_(s) {
 }
 
 function buildDefaultDescription_(msg) {
-  // Convert the HTML body to Markdown
+  // This function is no longer used to pre-fill the description field,
+  // but it's kept here in case you want to revert.
   return htmlToMarkdown_(msg.htmlBody || "");
 }
 
