@@ -210,8 +210,9 @@ function handleCreateIssue_(e) {
   try {
     const msg = GmailApp.getMessageById(messageId);
     const emailUrl = buildGmailPermalink_(threadId);
-    const headerBlock = buildHeaderBlock_(msg, emailUrl);
-    const finalDesc = headerBlock + "\n\n" + (description || "").trim();
+    // Add blockquote formatting to the description
+    const headerBlock = `**Created from Gmail**\n**Subject:** [${msg.getSubject()}](${emailUrl})`;
+    const finalDesc = `${headerBlock}\n\n> ${description.replace(/\n/g, '\n> ')}`;
 
     const priorityInt = parseInt(priority, 10);
     const result = linearCreateIssue_(resolvedTeamId, title, finalDesc, priorityInt);
@@ -221,7 +222,7 @@ function handleCreateIssue_(e) {
     // --- SAVE THE LAST USED TEAM AND PRIORITY ---
     USER_PROPS.setProperty(PROP_DEFAULT_TEAM_ID, resolvedTeamId);
     if (!isNaN(priorityInt)) {
-      USER_PROPS.setProperty(PROP_DEFAULT_PRIORITY, priorityInt);
+      USER_PROPS.setProperty(PROP_DEFAULT_PRIORITY, priorityInt.toString());
     }
 
     const success = CardService.newCardSection()
@@ -249,7 +250,7 @@ function getMessageFromEvent_(e) {
     from: m.getFrom(),
     subject: m.getSubject(),
     date: m.getDate(),
-    plainBody: truncate_(m.getPlainBody(), 7500)
+    htmlBody: m.getBody() // Get the full HTML body
   };
 }
 
@@ -262,24 +263,49 @@ function safeSubject_(s) {
 }
 
 function buildDefaultDescription_(msg) {
-  return [msg.plainBody || ""].join("\n").trim();
-}
-
-function buildHeaderBlock_(gmailMessage, emailUrl) {
-  return [
-    "**Created from Gmail**",
-    `**Subject:** [${gmailMessage.getSubject()}](${emailUrl})`
-  ].join("\n");
-}
-
-function truncate_(s, n) {
-  if (!s) return "";
-  return s.length > n ? s.substring(0, n) + "\n…[truncated]" : s;
+  // Convert the HTML body to Markdown
+  return htmlToMarkdown_(msg.htmlBody || "");
 }
 
 function getSingleValue_(inputs, name) {
   return (inputs[name]?.stringInputs?.value || [])[0] || "";
 }
+
+/** Helpers – HTML to Markdown **/
+function htmlToMarkdown_(html) {
+  if (!html) return "";
+
+  // A more robust HTML to Markdown converter for Linear
+  return html
+    // Remove scripts, styles, and head
+    .replace(/<script[^>]*>([\S\s]*?)<\/script>/gmi, '')
+    .replace(/<style[^>]*>([\S\s]*?)<\/style>/gmi, '')
+    .replace(/<head[^>]*>([\S\s]*?)<\/head>/gmi, '')
+    // Convert links
+    .replace(/<a.*?href=["'](.*?)["'].*?>(.*?)<\/a>/gi, '[$2]($1)')
+    // Block elements with newlines
+    .replace(/<(p|div|h1|h2|h3|h4|h5|h6)[^>]*>/gi, '\n')
+    // List items
+    .replace(/<li[^>]*>/gi, '\n* ')
+    // Line breaks
+    .replace(/<br[^>]*>/gi, '\n')
+    // Bold and italic
+    .replace(/<(strong|b)>/gi, '**').replace(/<\/(strong|b)>/gi, '**')
+    .replace(/<(em|i)>/gi, '_').replace(/<\/(em|i)>/gi, '_')
+    // Strip all remaining tags
+    .replace(/<[^>]+>/g, '')
+    // Decode HTML entities
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    // Clean up extra whitespace and newlines
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 
 /** Helpers – Team input & resolution **/
 function buildTeamTypeaheadWidget_() {
@@ -307,7 +333,7 @@ function buildTeamTypeaheadWidget_() {
     });
 
     const sugg = CardService.newSuggestions();
-    suggestions.slice(0, 100).forEach(s => sugg.addSuggestion(s)); // preserve sorted order
+    suggestions.slice(0, 100).forEach(s => sugg.addSuggestion(s));
 
     const hint = "Type team name, key (e.g., ENG) or paste team ID";
     const input = CardService.newTextInput()
@@ -316,7 +342,6 @@ function buildTeamTypeaheadWidget_() {
       .setHint(hint)
       .setSuggestions(sugg);
 
-    // --- SET THE DEFAULT VALUE ---
     if (defaultValue) {
       input.setValue(defaultValue);
     }
