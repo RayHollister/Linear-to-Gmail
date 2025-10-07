@@ -190,7 +190,7 @@ function handleCreateIssue_(e) {
   const inputs = e.commonEventObject.formInputs || {};
   const params = e.commonEventObject.parameters || {};
   const title = getSingleValue_(inputs, "title");
-  const userDescription = getSingleValue_(inputs, "description"); // This is the user-typed text
+  const userDescription = getSingleValue_(inputs, "description");
   const teamQuery = getSingleValue_(inputs, "teamQuery");
   const priority = getSingleValue_(inputs, "priority");
 
@@ -210,18 +210,18 @@ function handleCreateIssue_(e) {
   try {
     const msg = GmailApp.getMessageById(messageId);
     const emailUrl = buildGmailPermalink_(threadId);
-
-    // Build the email body part
+    
+    // Convert the email body to Markdown
     const emailBody = htmlToMarkdown_(msg.getBody());
-    const emailBodyBlock = `> ${emailBody.replace(/\n/g, '\n> ')}`;
 
-    // Build the header part
-    const headerBlock = `**Created from Gmail**\n**Subject:** [${msg.getSubject()}](${emailUrl})`;
-
-    // Assemble the final description in the correct order
-    const finalDesc = [userDescription, headerBlock, emailBodyBlock]
-      .filter(Boolean) // Remove any empty parts (like if the user doesn't add a description)
-      .join('\n\n');
+    // Create the collapsible section with a linked subject line
+    const collapsibleSection = 
+      `\n\n+++ Created from Gmail Subject: [${msg.getSubject()}](${emailUrl})\n\n` +
+      `${emailBody}\n\n` +
+      `+++`;
+      
+    // Assemble the final description, with user's text first
+    const finalDesc = [userDescription, collapsibleSection].filter(Boolean).join('\n\n');
 
     const priorityInt = parseInt(priority, 10);
     const result = linearCreateIssue_(resolvedTeamId, title, finalDesc, priorityInt);
@@ -272,9 +272,7 @@ function safeSubject_(s) {
 }
 
 function buildDefaultDescription_(msg) {
-  // This function is no longer used to pre-fill the description field,
-  // but it's kept here in case you want to revert.
-  return htmlToMarkdown_(msg.htmlBody || "");
+  return ""; // Keep the description field blank by default
 }
 
 function getSingleValue_(inputs, name) {
