@@ -89,14 +89,18 @@ function buildIssueComposerCard_(msg) {
   const createAction = CardService.newAction()
     .setFunctionName("handleCreateIssue_")
     .setParameters({ messageId: msg.id, threadId: msg.threadId });
+
+  // Create and style the "Create issue" button
   const createBtn = CardService.newTextButton()
-    .setText("Create issue in Linear")
+    .setText("Create issue in Linear") // Set text color to white
     .setOnClickAction(createAction)
-    .setTextButtonStyle(CardService.TextButtonStyle.FILLED);
+    .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+    // .setBackgroundColor("#5E6AD2"); 
+
   const settingsNav = CardService.newTextButton()
     .setText("Settings")
     .setOnClickAction(CardService.newAction().setFunctionName("handleNavSettings_"))
-    .setTextButtonStyle(CardService.TextButtonStyle.OUTLINED); // Set outlined style for the border
+    .setTextButtonStyle(CardService.TextButtonStyle.OUTLINED);
 
   const mainSection = CardService.newCardSection()
     .addWidget(titleInput)
@@ -114,14 +118,13 @@ function buildIssueComposerCard_(msg) {
 
   mainSection.addWidget(createBtn);
 
-  // Create a separate section for the settings button
   const settingsSection = CardService.newCardSection()
     .addWidget(settingsNav);
 
   return CardService.newCardBuilder()
     .setHeader(header)
     .addSection(mainSection)
-    .addSection(settingsSection) // Add the new section to the card
+    .addSection(settingsSection)
     .build();
 }
 
