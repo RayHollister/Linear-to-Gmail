@@ -35,7 +35,22 @@ function buildSettingsOrWelcomeCard_() {
   if (!getApiKey_()) {
     return buildSettingsCard_("Add your Linear API key to get started.");
   }
-  return buildSimpleCard_("Linear for Gmail is ready", "Open any email to create an issue.");
+
+  // Build the welcome card with a persistent Settings button
+  const settingsAction = CardService.newAction().setFunctionName("handleNavSettings_");
+  const settingsButton = CardService.newTextButton()
+    .setText("Settings")
+    .setOnClickAction(settingsAction)
+    .setTextButtonStyle(CardService.TextButtonStyle.TEXT);
+
+  const section = CardService.newCardSection()
+    .addWidget(CardService.newTextParagraph().setText("Open any email to create an issue."))
+    .addWidget(settingsButton);
+    
+  return CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle("Linear for Gmail is ready"))
+    .addSection(section)
+    .build();
 }
 
 function buildSettingsCard_(subtitle) {
@@ -71,9 +86,12 @@ function buildSettingsCard_(subtitle) {
 }
 
 function buildIssueComposerCard_(msg) {
+  // Create a new card header with the Linear logo
   const header = CardService.newCardHeader()
-    .setTitle("Create Linear issue")
-    .setSubtitle("From: " + msg.from);
+    .setImageUrl("https://rayhollister.com/Linear-to-Gmail/linear-for-gmail-icon-128.png")
+    .setImageStyle(CardService.ImageStyle.CIRCLE)
+    .setTitle("Create Linear Issue")
+    
   const titleInput = CardService.newTextInput()
     .setFieldName("title")
     .setTitle("Title")
@@ -95,11 +113,7 @@ function buildIssueComposerCard_(msg) {
     .setText("<b>Create issue in Linear</b>")
     .setOnClickAction(createAction)
     .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
-
-  const settingsNav = CardService.newTextButton()
-    .setText("Settings")
-    .setOnClickAction(CardService.newAction().setFunctionName("handleNavSettings_"))
-    .setTextButtonStyle(CardService.TextButtonStyle.OUTLINED);
+    .setBackgroundColor("#555fbd");
 
   const mainSection = CardService.newCardSection()
     .addWidget(titleInput)
@@ -117,20 +131,16 @@ function buildIssueComposerCard_(msg) {
 
   mainSection.addWidget(createBtn);
 
-  const settingsSection = CardService.newCardSection()
-    .addWidget(settingsNav);
-
   return CardService.newCardBuilder()
     .setHeader(header)
     .addSection(mainSection)
-    .addSection(settingsSection)
     .build();
 }
 
 
 function buildSimpleCard_(title, subtitle) {
   return CardService.newCardBuilder()
-    .setHeader(CardService.newCardHeader().setTitle(title).setSubtitle(subtitle || ""))
+    .setHeader(CardService.newCardHeader().setTitle(title))
     .build();
 }
 
