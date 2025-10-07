@@ -86,7 +86,6 @@ function buildSettingsCard_(subtitle) {
 }
 
 function buildIssueComposerCard_(msg) {
-  // Create a new card header with the Linear logo
   const header = CardService.newCardHeader()
     .setImageUrl("https://rayhollister.com/Linear-to-Gmail/linear-for-gmail-icon-128.png")
     .setImageStyle(CardService.ImageStyle.CIRCLE)
@@ -215,6 +214,9 @@ function handleCreateIssue_(e) {
     const url = result?.data?.issueCreate?.issue?.url;
     if (!url) throw new Error("Missing Linear URL in response.");
 
+    // --- SAVE THE LAST USED TEAM ID ---
+    USER_PROPS.setProperty(PROP_DEFAULT_TEAM_ID, resolvedTeamId);
+
     const success = CardService.newCardSection()
       .addWidget(CardService.newKeyValue().setTopLabel("Success").setContent("Issue created"))
       .addWidget(CardService.newTextButton().setText("Open in Linear").setOpenLink(CardService.newOpenLink().setUrl(url)))
@@ -275,9 +277,13 @@ function getSingleValue_(inputs, name) {
 /** Helpers – Team input & resolution **/
 function buildTeamTypeaheadWidget_() {
   try {
-    const teams = linearFetchTeams_();
-    // sorted
+    const teams = linearFetchTeams_(); // sorted
     if (!teams.length) return null;
+
+    // --- GET THE LAST-USED TEAM ---
+    const defaultTeamId = getDefaultTeamId_();
+    const defaultTeam = teams.find(t => t.id === defaultTeamId);
+    const defaultValue = defaultTeam ? defaultTeam.name : "";
 
     // Build suggestions from names and keys (deduped, in sorted team order)
     const seen = {};
@@ -293,7 +299,6 @@ function buildTeamTypeaheadWidget_() {
         suggestions.push(key);
         seen[key.toLowerCase()] = true;
       }
-    
     });
 
     const sugg = CardService.newSuggestions();
@@ -305,6 +310,12 @@ function buildTeamTypeaheadWidget_() {
       .setTitle("Team")
       .setHint(hint)
       .setSuggestions(sugg);
+
+    // --- SET THE DEFAULT VALUE ---
+    if (defaultValue) {
+      input.setValue(defaultValue);
+    }
+    
     return input;
   } catch (err) {
     return null;
