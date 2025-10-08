@@ -154,16 +154,20 @@ function buildExistingIssueCard_(issue) {
     .setImageStyle(CardService.ImageStyle.CIRCLE)
     .setTitle("Issue Already Exists");
 
+  // Create and style the "Open in Linear" button
+  const openInLinearButton = CardService.newTextButton()
+    .setText(`<b>Open ${issue.identifier} in Linear</b>`)
+    .setOpenLink(CardService.newOpenLink().setUrl(issue.url))
+    .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+    .setBackgroundColor("#555fbd");
+
   const section = CardService.newCardSection()
     .addWidget(CardService.newKeyValue().setTopLabel("Title").setContent(issue.title))
-    .addWidget(CardService.newKeyValue().setTopLabel("Description").setContent(truncate_(issue.description, 100)))
     .addWidget(CardService.newKeyValue().setTopLabel("Status").setContent(issue.state.name))
     .addWidget(CardService.newKeyValue().setTopLabel("Priority").setContent(getPriorityLabel_(issue.priority)))
     .addWidget(CardService.newKeyValue().setTopLabel("Due Date").setContent(issue.dueDate ? new Date(issue.dueDate).toLocaleDateString() : 'None'))
     .addWidget(CardService.newKeyValue().setTopLabel("Assignee").setContent(issue.assignee ? issue.assignee.name : 'Unassigned'))
-    .addWidget(CardService.newTextButton()
-        .setText(`Open ${issue.identifier} in Linear`)
-        .setOpenLink(CardService.newOpenLink().setUrl(issue.url)));
+    .addWidget(openInLinearButton);
         
   return CardService.newCardBuilder()
     .setHeader(header)
@@ -321,7 +325,6 @@ function getPriorityLabel_(priorityValue) {
   return priorities[priorityValue] || 'None';
 }
 
-// Re-add the missing truncate_ function
 function truncate_(s, n) {
   if (!s) return "";
   return s.length > n ? s.substring(0, n) + "..." : s;
