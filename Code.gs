@@ -155,13 +155,16 @@ function buildExistingIssueCard_(issue) {
     .setTitle("Issue Already Exists");
 
   const section = CardService.newCardSection()
-    .addWidget(CardService.newKeyValue()
-      .setTopLabel("An issue for this email has already been created.")
-      .setContent(issue.title)
-      .setButton(CardService.newTextButton()
+    .addWidget(CardService.newKeyValue().setTopLabel("Title").setContent(issue.title))
+    .addWidget(CardService.newKeyValue().setTopLabel("Description").setContent(truncate_(issue.description, 100)))
+    .addWidget(CardService.newKeyValue().setTopLabel("Status").setContent(issue.state.name))
+    .addWidget(CardService.newKeyValue().setTopLabel("Priority").setContent(getPriorityLabel_(issue.priority)))
+    .addWidget(CardService.newKeyValue().setTopLabel("Due Date").setContent(issue.dueDate ? new Date(issue.dueDate).toLocaleDateString() : 'None'))
+    .addWidget(CardService.newKeyValue().setTopLabel("Assignee").setContent(issue.assignee ? issue.assignee.name : 'Unassigned'))
+    .addWidget(CardService.newTextButton()
         .setText(`Open ${issue.identifier} in Linear`)
-        .setOpenLink(CardService.newOpenLink().setUrl(issue.url))));
-
+        .setOpenLink(CardService.newOpenLink().setUrl(issue.url)));
+        
   return CardService.newCardBuilder()
     .setHeader(header)
     .addSection(section)
@@ -248,7 +251,7 @@ function handleCreateIssue_(e) {
 
     // Create the collapsible section with a linked subject line and the visible ID
     const collapsibleSection = 
-      `\n\n+++ Created from Gmail Subject: [${msg.getSubject()}](${buildGmailPermalink_(threadId)})\n\n` +
+      `\n\n+++ Created from Gmail: [${msg.getSubject()}](${buildGmailPermalink_(threadId)})\n\n` +
       `${emailBody}\n\n` +
       `${emailIdentifier}\n\n` +
       `+++`;
@@ -312,6 +315,18 @@ function buildDefaultDescription_(msg) {
 function getSingleValue_(inputs, name) {
   return (inputs[name]?.stringInputs?.value || [])[0] || "";
 }
+
+function getPriorityLabel_(priorityValue) {
+  const priorities = { '0': 'No priority', '1': 'Urgent', '2': 'High', '3': 'Medium', '4': 'Low' };
+  return priorities[priorityValue] || 'None';
+}
+
+// Re-add the missing truncate_ function
+function truncate_(s, n) {
+  if (!s) return "";
+  return s.length > n ? s.substring(0, n) + "..." : s;
+}
+
 
 /** Helpers – HTML to Markdown **/
 function htmlToMarkdown_(html) {
@@ -446,8 +461,13 @@ function linearSearchForIssue_(searchTerm) {
         nodes {
           id
           title
+          description
           identifier
           url
+          state { name }
+          priority
+          dueDate
+          assignee { name }
         }
       }
     }
