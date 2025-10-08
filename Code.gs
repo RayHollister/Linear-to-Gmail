@@ -24,17 +24,16 @@ function onGmailMessageOpen(e) {
     return buildSettingsCard_("Before creating issues, add your Linear API key.");
   }
   try {
-    const msg = getMessageFromEvent_(e);
+    const threadData = getThreadDataFromEvent_(e);
     
-    // Create a clean search term from the Message-ID
-    const searchTerm = `gmail_message_id:${msg.messageId.replace(/[<>]/g, "")}`;
-    const existingIssue = linearSearchForIssue_(searchTerm);
+    // Check if any message in the thread already has an issue
+    const existingIssue = linearSearchForThread_(threadData.messageIds);
     
     if (existingIssue) {
       return buildExistingIssueCard_(existingIssue);
     }
 
-    return buildIssueComposerCard_(msg);
+    return buildIssueComposerCard_(threadData.message);
   } catch (err) {
     return buildErrorCard_("Could not read this message. " + err);
   }
@@ -160,12 +159,17 @@ function buildExistingIssueCard_(issue) {
     .setOpenLink(CardService.newOpenLink().setUrl(issue.url))
     .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
     .setBackgroundColor("#555fbd");
+  
+  // Correctly format the UTC date to avoid timezone shifts
+  const dueDateString = issue.dueDate
+    ? Utilities.formatDate(new Date(issue.dueDate), "UTC", "MM/dd/yyyy")
+    : 'None';
 
   const section = CardService.newCardSection()
     .addWidget(CardService.newKeyValue().setTopLabel("Title").setContent(issue.title))
     .addWidget(CardService.newKeyValue().setTopLabel("Status").setContent(issue.state.name))
     .addWidget(CardService.newKeyValue().setTopLabel("Priority").setContent(getPriorityLabel_(issue.priority)))
-    .addWidget(CardService.newKeyValue().setTopLabel("Due Date").setContent(issue.dueDate ? new Date(issue.dueDate).toLocaleDateString() : 'None'))
+    .addWidget(CardService.newKeyValue().setTopLabel("Due Date").setContent(dueDateString))
     .addWidget(CardService.newKeyValue().setTopLabel("Assignee").setContent(issue.assignee ? issue.assignee.name : 'Unassigned'))
     .addWidget(openInLinearButton);
         
@@ -288,21 +292,31 @@ function handleCreateIssue_(e) {
 }
 
 /** Helpers – Gmail **/
-function getMessageFromEvent_(e) {
-  const msgId = e.gmail?.messageId || e.commonEventObject?.parameters?.messageId;
-  if (!msgId) throw new Error("No messageId in event.");
-  const m = GmailApp.getMessageById(msgId);
-  const thread = m.getThread();
+function getThreadDataFromEvent_(e) {
+  const messageId = e.gmail?.messageId || e.commonEventObject?.parameters?.messageId;
+  if (!messageId) throw new Error("No messageId in event.");
+
+  const currentMessage = GmailApp.getMessageById(messageId);
+  const thread = currentMessage.getThread();
+  const messages = thread.getMessages();
+
+  // Get all unique Message-IDs from the thread
+  const messageIds = messages.map(m => m.getHeader("Message-ID").replace(/[<>]/g, ""));
+
   return {
-    id: m.getId(),
-    threadId: thread.getId(),
-    from: m.getFrom(),
-    subject: m.getSubject(),
-    date: m.getDate(),
-    htmlBody: m.getBody(),
-    messageId: m.getHeader("Message-ID") // Get the unique Message-ID
+    message: { // Data for the currently open message
+      id: currentMessage.getId(),
+      threadId: thread.getId(),
+      from: currentMessage.getFrom(),
+      subject: currentMessage.getSubject(),
+      date: currentMessage.getDate(),
+      htmlBody: currentMessage.getBody(),
+      messageId: currentMessage.getHeader("Message-ID")
+    },
+    messageIds: messageIds // All message IDs in the thread
   };
 }
+
 
 function buildGmailPermalink_(threadId) {
   return "https://mail.google.com/mail/u/0/#inbox/" + encodeURIComponent(threadId);
@@ -324,12 +338,6 @@ function getPriorityLabel_(priorityValue) {
   const priorities = { '0': 'No priority', '1': 'Urgent', '2': 'High', '3': 'Medium', '4': 'Low' };
   return priorities[priorityValue] || 'None';
 }
-
-function truncate_(s, n) {
-  if (!s) return "";
-  return s.length > n ? s.substring(0, n) + "..." : s;
-}
-
 
 /** Helpers – HTML to Markdown **/
 function htmlToMarkdown_(html) {
@@ -457,7 +465,8 @@ function resolveTeamIdByQuery_(teams, queryRaw) {
 }
 
 /** Linear API – core **/
-function linearSearchForIssue_(searchTerm) {
+function linearSearchForThread_(messageIds) {
+  const searchTerms = messageIds.map(id => `gmail_message_id:${id}`);
   const query = `
     query Issues($filter: IssueFilter) {
       issues(filter: $filter, first: 1) {
@@ -475,7 +484,11 @@ function linearSearchForIssue_(searchTerm) {
       }
     }
   `;
-  const filter = { description: { contains: searchTerm } };
+  // Use an 'OR' filter to search for any of the message IDs
+  const filter = {
+    or: searchTerms.map(term => ({ description: { contains: term } }))
+  };
+  
   const resp = linearRequest_(query, { filter });
   const nodes = resp?.data?.issues?.nodes || [];
   return nodes.length > 0 ? nodes[0] : null;
