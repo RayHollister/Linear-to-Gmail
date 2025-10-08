@@ -25,6 +25,15 @@ function onGmailMessageOpen(e) {
   }
   try {
     const msg = getMessageFromEvent_(e);
+    
+    // Create a clean search term from the Message-ID
+    const searchTerm = `gmail_message_id:${msg.messageId.replace(/[<>]/g, "")}`;
+    const existingIssue = linearSearchForIssue_(searchTerm);
+    
+    if (existingIssue) {
+      return buildExistingIssueCard_(existingIssue);
+    }
+
     return buildIssueComposerCard_(msg);
   } catch (err) {
     return buildErrorCard_("Could not read this message. " + err);
@@ -139,6 +148,26 @@ function buildIssueComposerCard_(msg) {
     .build();
 }
 
+function buildExistingIssueCard_(issue) {
+  const header = CardService.newCardHeader()
+    .setImageUrl("https://rayhollister.com/Linear-to-Gmail/linear-for-gmail-icon-128.png")
+    .setImageStyle(CardService.ImageStyle.CIRCLE)
+    .setTitle("Issue Already Exists");
+
+  const section = CardService.newCardSection()
+    .addWidget(CardService.newKeyValue()
+      .setTopLabel("An issue for this email has already been created.")
+      .setContent(issue.title)
+      .setButton(CardService.newTextButton()
+        .setText(`Open ${issue.identifier} in Linear`)
+        .setOpenLink(CardService.newOpenLink().setUrl(issue.url))));
+
+  return CardService.newCardBuilder()
+    .setHeader(header)
+    .addSection(section)
+    .build();
+}
+
 
 function buildSimpleCard_(title, subtitle) {
   return CardService.newCardBuilder()
@@ -209,15 +238,19 @@ function handleCreateIssue_(e) {
 
   try {
     const msg = GmailApp.getMessageById(messageId);
-    const emailUrl = buildGmailPermalink_(threadId);
     
     // Convert the email body to Markdown
     const emailBody = htmlToMarkdown_(msg.getBody());
+    
+    // Create a unique, visible identifier for this email
+    const cleanMessageId = msg.getHeader("Message-ID").replace(/[<>]/g, "");
+    const emailIdentifier = `gmail_message_id:${cleanMessageId}`;
 
-    // Create the collapsible section with a linked subject line
+    // Create the collapsible section with a linked subject line and the visible ID
     const collapsibleSection = 
-      `\n\n+++ Created from Gmail Subject: [${msg.getSubject()}](${emailUrl})\n\n` +
+      `\n\n+++ Created from Gmail Subject: [${msg.getSubject()}](${buildGmailPermalink_(threadId)})\n\n` +
       `${emailBody}\n\n` +
+      `${emailIdentifier}\n\n` +
       `+++`;
       
     // Assemble the final description, with user's text first
@@ -237,7 +270,7 @@ function handleCreateIssue_(e) {
     const success = CardService.newCardSection()
       .addWidget(CardService.newKeyValue().setTopLabel("Success").setContent("Issue created"))
       .addWidget(CardService.newTextButton().setText("Open in Linear").setOpenLink(CardService.newOpenLink().setUrl(url)))
-      .addWidget(CardService.newTextButton().setText("Open this email in Gmail").setOpenLink(CardService.newOpenLink().setUrl(emailUrl)));
+      .addWidget(CardService.newTextButton().setText("Open this email in Gmail").setOpenLink(CardService.newOpenLink().setUrl(buildGmailPermalink_(threadId))));
     return CardService.newCardBuilder()
       .setHeader(CardService.newCardHeader().setTitle("Linear issue created"))
       .addSection(success)
@@ -259,7 +292,8 @@ function getMessageFromEvent_(e) {
     from: m.getFrom(),
     subject: m.getSubject(),
     date: m.getDate(),
-    htmlBody: m.getBody() // Get the full HTML body
+    htmlBody: m.getBody(),
+    messageId: m.getHeader("Message-ID") // Get the unique Message-ID
   };
 }
 
@@ -405,6 +439,25 @@ function resolveTeamIdByQuery_(teams, queryRaw) {
 }
 
 /** Linear API – core **/
+function linearSearchForIssue_(searchTerm) {
+  const query = `
+    query Issues($filter: IssueFilter) {
+      issues(filter: $filter, first: 1) {
+        nodes {
+          id
+          title
+          identifier
+          url
+        }
+      }
+    }
+  `;
+  const filter = { description: { contains: searchTerm } };
+  const resp = linearRequest_(query, { filter });
+  const nodes = resp?.data?.issues?.nodes || [];
+  return nodes.length > 0 ? nodes[0] : null;
+}
+
 function linearFetchTeams_() {
   const query = `
     query MyTeams {
