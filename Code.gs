@@ -366,16 +366,12 @@ function getPriorityIconUrl_(priorityValue) {
   switch (String(priorityValue)) {
     case '1': // Urgent
       return "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cmVjdCB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHJ4PSIzIiByeT0iMyIgZmlsbD0iIzU1NWZiZCIvPjxyZWN0IHg9IjciIHk9IjQiIHdpZHRoPSIyIiBoZWlnaHQ9IjYiIHJ4PSIxIiBmaWxsPSIjZmZmIi8+PGNpcmNsZSBjeD0iOCIgY3k9IjEyLjUiIHI9IjEiIGZpbGw9IiNmZmYiLz48L3N2Zz4=";
-
     case '2': // High
       return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iIzU1NWZiZCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIxLjUiIHk9IjgiIHdpZHRoPSIzIiBoZWlnaHQ9IjYiIHJ4PSIxIi8+PHJlY3QgeD0iNi41IiB5PSI1IiB3aWR0aD0iMyIgaGVpZ2h0PSI5IiByeD0iMSIvPjxyZWN0IHg9IjExLjUiIHk9IjIiIHdpZHRoPSIzIiBoZWlnaHQ9IjEyIiByeD0iMSIvPjwvc3ZnPg==";
-
     case '3': // Medium
       return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iIzU1NWZiZCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIxLjUiIHk9IjgiIHdpZHRoPSIzIiBoZWlnaHQ9IjYiIHJ4PSIxIi8+PHJlY3QgeD0iNi41IiB5PSI1IiB3aWR0aD0iMyIgaGVpZ2h0PSI5IiByeD0iMSIvPjxyZWN0IHg9IjExLjUiIHk9IjIiIHdpZHRoPSIzIiBoZWlnaHQ9IjEyIiByeD0iMSIgZmlsbC1vcGFjaXR5PSIwLjQiLz48L3N2Zz4=";
-
     case '4': // Low
       return "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0iIzU1NWZiZCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIxLjUiIHk9IjgiIHdpZHRoPSIzIiBoZWlnaHQ9IjYiIHJ4PSIxIi8+PHJlY3QgeD0iNi41IiB5PSI1IiB3aWR0aD0iMyIgaGVpZ2h0PSI5IiByeD0iMSIgZmlsbC1vcGFjaXR5PSIwLjQiLz48cmVjdCB4PSIxMS41IiB5PSIyIiB3aWR0aD0iMyIgaGVpZ2h0PSIxMiIgcng9IjEiIGZpbGwtb3BhY2l0eT0iMC40Ii8+PC9zdmc+";
-
     case '0': // No Priority
     default:
       return "data:image/svg+xml;base64,PHN2ZyBhcmlhLWxhYmVsPSJObyBQcmlvcml0eSIgd2lkdGg9IjE2IiBoZWlnaHQ9IjE2IiB2aWV3Qm94PSIwIDAgMTYgMTYiIHJvbGU9ImltZyIgZm9jdXNhYmxlPSJmYWxzZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB4PSIxLjUiIHk9IjcuMjUiIHdpZHRoPSIzIiBoZWlnaHQ9IjEuNSIgcng9IjAuNSIgb3BhY2l0eT0iMC45IiBmaWxsPSIjNTU1ZmJkIi8+PHJlY3QgeD0iNi41IiB5PSI3LjI1IiB3aWR0aD0iMyIgaGVpZ2h0PSIxLjUiIHJ4PSIwLjUiIG9wYWNpdHk9IjAuOSIgc3R5bGU9ImZpbGw6IzU1NWZiZCIvPjxyZWN0IHg9IjExLjUiIHk9IjcuMjUiIHdpZHRoPSIzIiBoZWlnaHQ9IjEuNSIgcng9IjAuNSIgb3BhY2l0eT0iMC45IiBzdHlsZT0iZmlsbDojNTU1ZmJkIi8+PC9zdmc+";
@@ -543,7 +539,7 @@ function linearFetchTeams_() {
     }
   `;
   const resp = linearRequest_(query, {});
-  const nodes = resp?.data?.issues?.nodes || [];
+  const nodes = resp?.data?.teams?.nodes || [];
   return sortTeams_(nodes);
 }
 
