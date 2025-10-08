@@ -27,10 +27,10 @@ function onGmailMessageOpen(e) {
     const threadData = getThreadDataFromEvent_(e);
     
     // Check if any message in the thread already has an issue
-    const existingIssue = linearSearchForThread_(threadData.messageIds);
+    const existingIssues = linearSearchForThread_(threadData.messageIds);
     
-    if (existingIssue) {
-      return buildExistingIssueCard_(existingIssue);
+    if (existingIssues.length > 0) {
+      return buildExistingIssuesCard_(existingIssues, threadData.message);
     }
 
     return buildIssueComposerCard_(threadData.message);
@@ -147,36 +147,49 @@ function buildIssueComposerCard_(msg) {
     .build();
 }
 
-function buildExistingIssueCard_(issue) {
+function buildExistingIssuesCard_(issues, currentMessage) {
   const header = CardService.newCardHeader()
     .setImageUrl("https://rayhollister.com/Linear-to-Gmail/linear-for-gmail-icon-128.png")
     .setImageStyle(CardService.ImageStyle.CIRCLE)
-    .setTitle("Issue Already Exists");
+    .setTitle("Existing Issues Found");
 
-  // Create and style the "Open in Linear" button
-  const openInLinearButton = CardService.newTextButton()
-    .setText(`<b>Open ${issue.identifier} in Linear</b>`)
-    .setOpenLink(CardService.newOpenLink().setUrl(issue.url))
-    .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
-    .setBackgroundColor("#555fbd");
+  const cardBuilder = CardService.newCardBuilder().setHeader(header);
+
+  issues.forEach(issue => {
+    const openInLinearButton = CardService.newTextButton()
+      .setText(`<b>Open ${issue.identifier} in Linear</b>`)
+      .setOpenLink(CardService.newOpenLink().setUrl(issue.url))
+      .setTextButtonStyle(CardService.TextButtonStyle.FILLED)
+      .setBackgroundColor("#555fbd");
+      
+    const dueDateString = issue.dueDate
+      ? Utilities.formatDate(new Date(issue.dueDate), "UTC", "MM/dd/yyyy")
+      : 'None';
+
+    const section = CardService.newCardSection()
+      .addWidget(CardService.newKeyValue().setTopLabel("Title").setContent(issue.title))
+      .addWidget(CardService.newKeyValue().setTopLabel("Status").setContent(issue.state.name))
+      .addWidget(CardService.newKeyValue().setTopLabel("Priority").setContent(getPriorityLabel_(issue.priority)))
+      .addWidget(CardService.newKeyValue().setTopLabel("Due Date").setContent(dueDateString))
+      .addWidget(CardService.newKeyValue().setTopLabel("Assignee").setContent(issue.assignee ? issue.assignee.name : 'Unassigned'))
+      .addWidget(openInLinearButton);
+      
+    cardBuilder.addSection(section);
+  });
   
-  // Correctly format the UTC date to avoid timezone shifts
-  const dueDateString = issue.dueDate
-    ? Utilities.formatDate(new Date(issue.dueDate), "UTC", "MM/dd/yyyy")
-    : 'None';
-
-  const section = CardService.newCardSection()
-    .addWidget(CardService.newKeyValue().setTopLabel("Title").setContent(issue.title))
-    .addWidget(CardService.newKeyValue().setTopLabel("Status").setContent(issue.state.name))
-    .addWidget(CardService.newKeyValue().setTopLabel("Priority").setContent(getPriorityLabel_(issue.priority)))
-    .addWidget(CardService.newKeyValue().setTopLabel("Due Date").setContent(dueDateString))
-    .addWidget(CardService.newKeyValue().setTopLabel("Assignee").setContent(issue.assignee ? issue.assignee.name : 'Unassigned'))
-    .addWidget(openInLinearButton);
+  const createNewAction = CardService.newAction()
+    .setFunctionName("handleNavCreateIssue_")
+    .setParameters({ messageId: currentMessage.id, threadId: currentMessage.threadId });
+    
+  const createNewButton = CardService.newTextButton()
+    .setText("Create New Issue")
+    .setOnClickAction(createNewAction)
+    .setTextButtonStyle(CardService.TextButtonStyle.TEXT);
+    
+  const finalSection = CardService.newCardSection().addWidget(createNewButton);
+  cardBuilder.addSection(finalSection);
         
-  return CardService.newCardBuilder()
-    .setHeader(header)
-    .addSection(section)
-    .build();
+  return cardBuilder.build();
 }
 
 
@@ -194,6 +207,12 @@ function buildErrorCard_(message) {
 }
 
 /** Actions **/
+function handleNavCreateIssue_(e) {
+  // CORRECTED: Use the new getThreadDataFromEvent_ function
+  const threadData = getThreadDataFromEvent_(e);
+  return buildIssueComposerCard_(threadData.message);
+}
+
 function handleSaveSettings_(e) {
   const apiKey = (e.commonEventObject.formInputs.apiKey?.stringInputs?.value || [])[0] || "";
   if (!apiKey) {
@@ -469,7 +488,7 @@ function linearSearchForThread_(messageIds) {
   const searchTerms = messageIds.map(id => `gmail_message_id:${id}`);
   const query = `
     query Issues($filter: IssueFilter) {
-      issues(filter: $filter, first: 1) {
+      issues(filter: $filter) {
         nodes {
           id
           title
@@ -490,8 +509,7 @@ function linearSearchForThread_(messageIds) {
   };
   
   const resp = linearRequest_(query, { filter });
-  const nodes = resp?.data?.issues?.nodes || [];
-  return nodes.length > 0 ? nodes[0] : null;
+  return resp?.data?.issues?.nodes || [];
 }
 
 function linearFetchTeams_() {
