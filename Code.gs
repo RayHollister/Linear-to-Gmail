@@ -27,7 +27,7 @@ function onGmailMessageOpen(e) {
     const threadData = getThreadDataFromEvent_(e);
     
     // Check if any message in the thread already has an issue
-    const existingIssues = linearSearchForThread_(threadData.messageIds);
+    const existingIssues = linearSearchForThread_(threadData.searchCriteria);
     
     if (existingIssues.length > 0) {
       return buildExistingIssuesCard_(existingIssues, threadData.message);
@@ -323,8 +323,19 @@ function getThreadDataFromEvent_(e) {
   const thread = currentMessage.getThread();
   const messages = thread.getMessages();
 
-  // Get all unique Message-IDs from the thread
-  const messageIds = messages.map(m => m.getHeader("Message-ID").replace(/[<>]/g, ""));
+  // Create search criteria for the entire thread
+  const searchCriteria = messages.flatMap(m => {
+    const messageIdHeader = m.getHeader("Message-ID");
+    const subject = m.getSubject();
+    
+    if (!messageIdHeader || !subject) return [];
+    
+    // Search for both the add-on's tag and the issue title
+    return [
+      { description: { contains: `gmail_message_id:${messageIdHeader.replace(/[<>]/g, "")}` } },
+      { title: { eq: subject } }
+    ];
+  });
 
   return {
     message: { // Data for the currently open message
@@ -336,7 +347,7 @@ function getThreadDataFromEvent_(e) {
       htmlBody: currentMessage.getBody(),
       messageId: currentMessage.getHeader("Message-ID")
     },
-    messageIds: messageIds // All message IDs in the thread
+    searchCriteria: searchCriteria // Array of search filters for the thread
   };
 }
 
@@ -504,8 +515,11 @@ function resolveTeamIdByQuery_(teams, queryRaw) {
 }
 
 /** Linear API – core **/
-function linearSearchForThread_(messageIds) {
-  const searchTerms = messageIds.map(id => `gmail_message_id:${id}`);
+function linearSearchForThread_(searchCriteria) {
+  if (!searchCriteria || searchCriteria.length === 0) {
+    return [];
+  }
+
   const query = `
     query Issues($filter: IssueFilter) {
       issues(filter: $filter) {
@@ -523,10 +537,8 @@ function linearSearchForThread_(messageIds) {
       }
     }
   `;
-  // Use an 'OR' filter to search for any of the message IDs
-  const filter = {
-    or: searchTerms.map(term => ({ description: { contains: term } }))
-  };
+
+  const filter = { or: searchCriteria };
   
   const resp = linearRequest_(query, { filter });
   return resp?.data?.issues?.nodes || [];
