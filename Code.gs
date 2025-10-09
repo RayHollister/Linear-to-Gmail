@@ -27,7 +27,7 @@ function onGmailMessageOpen(e) {
     const threadData = getThreadDataFromEvent_(e);
     
     // Check if any message in the thread already has an issue
-    const existingIssues = linearSearchForThread_(threadData.searchCriteria);
+    const existingIssues = linearSearchForThread_(threadData.allMessageIds);
     
     if (existingIssues.length > 0) {
       return buildExistingIssuesCard_(existingIssues, threadData.message);
@@ -323,19 +323,8 @@ function getThreadDataFromEvent_(e) {
   const thread = currentMessage.getThread();
   const messages = thread.getMessages();
 
-  // Create search criteria for the entire thread
-  const searchCriteria = messages.flatMap(m => {
-    const messageIdHeader = m.getHeader("Message-ID");
-    const subject = m.getSubject();
-    
-    if (!messageIdHeader || !subject) return [];
-    
-    // Search for both the add-on's tag and the issue title
-    return [
-      { description: { contains: `gmail_message_id:${messageIdHeader.replace(/[<>]/g, "")}` } },
-      { title: { eq: subject } }
-    ];
-  });
+  // Get all unique Message-IDs from the thread, both raw and cleaned for our tag
+  const allMessageIds = messages.map(m => m.getHeader("Message-ID"));
 
   return {
     message: { // Data for the currently open message
@@ -347,7 +336,7 @@ function getThreadDataFromEvent_(e) {
       htmlBody: currentMessage.getBody(),
       messageId: currentMessage.getHeader("Message-ID")
     },
-    searchCriteria: searchCriteria // Array of search filters for the thread
+    allMessageIds: allMessageIds // All raw message IDs in the thread
   };
 }
 
@@ -515,11 +504,13 @@ function resolveTeamIdByQuery_(teams, queryRaw) {
 }
 
 /** Linear API – core **/
-function linearSearchForThread_(searchCriteria) {
-  if (!searchCriteria || searchCriteria.length === 0) {
-    return [];
-  }
-
+function linearSearchForThread_(messageIds) {
+  // Create two search terms for each message ID
+  const searchTerms = messageIds.flatMap(id => [
+    `gmail_message_id:${id.replace(/[<>]/g, "")}`, // For issues created by the add-on
+    id // For issues created by "Asks"
+  ]);
+  
   const query = `
     query Issues($filter: IssueFilter) {
       issues(filter: $filter) {
@@ -537,8 +528,10 @@ function linearSearchForThread_(searchCriteria) {
       }
     }
   `;
-
-  const filter = { or: searchCriteria };
+  // Use an 'OR' filter to search for any of the search terms
+  const filter = {
+    or: searchTerms.map(term => ({ description: { contains: term } }))
+  };
   
   const resp = linearRequest_(query, { filter });
   return resp?.data?.issues?.nodes || [];
