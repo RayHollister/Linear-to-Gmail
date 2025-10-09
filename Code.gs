@@ -110,7 +110,10 @@ function buildIssueComposerCard_(msg) {
     .setValue("") // Make the description field blank by default
     .setMultiline(true);
   const teamInput = buildTeamTypeaheadWidget_();
-  const priorityInput = buildPrioritySelector_(); // Create the priority selector
+  const priorityInput = buildPrioritySelector_();
+  const dueDateInput = CardService.newDatePicker()
+    .setFieldName("dueDate")
+    .setTitle("Due Date");
 
   // Pass message/thread IDs to the action as parameters
   const createAction = CardService.newAction()
@@ -138,7 +141,8 @@ function buildIssueComposerCard_(msg) {
     );
   }
 
-  mainSection.addWidget(priorityInput); // Add priority selector to the card
+  mainSection.addWidget(priorityInput);
+  mainSection.addWidget(dueDateInput); // Add due date picker to the card
   mainSection.addWidget(createBtn);
 
   return CardService.newCardBuilder()
@@ -256,6 +260,7 @@ function handleCreateIssue_(e) {
   const userDescription = getSingleValue_(inputs, "description");
   const teamQuery = getSingleValue_(inputs, "teamQuery");
   const priority = getSingleValue_(inputs, "priority");
+  const dueDateMillis = inputs.dueDate?.msSinceEpoch;
 
   const messageId = params.messageId;
   const threadId = params.threadId;
@@ -291,7 +296,9 @@ function handleCreateIssue_(e) {
     const finalDesc = [userDescription, collapsibleSection].filter(Boolean).join('\n\n');
 
     const priorityInt = parseInt(priority, 10);
-    const result = linearCreateIssue_(resolvedTeamId, title, finalDesc, priorityInt);
+    const formattedDueDate = dueDateMillis ? Utilities.formatDate(new Date(dueDateMillis), "UTC", "yyyy-MM-dd") : null;
+
+    const result = linearCreateIssue_(resolvedTeamId, title, finalDesc, priorityInt, formattedDueDate);
     const url = result?.data?.issueCreate?.issue?.url;
     if (!url) throw new Error("Missing Linear URL in response.");
 
@@ -325,16 +332,11 @@ function getThreadDataFromEvent_(e) {
 
   // Create search criteria for the entire thread
   const searchCriteria = messages.flatMap(m => {
-    const messageIdHeader = m.getHeader("Message-ID");
     const subject = m.getSubject();
+    if (!subject) return [];
     
-    if (!messageIdHeader || !subject) return [];
-    
-    // Search for both the add-on's tag and the issue title
-    return [
-      { description: { contains: `gmail_message_id:${messageIdHeader.replace(/[<>]/g, "")}` } },
-      { title: { eq: subject } }
-    ];
+    // Search for issues where an attachment title contains the email's subject
+    return [{ attachments: { some: { title: { contains: subject } } } }];
   });
 
   return {
@@ -555,12 +557,12 @@ function linearFetchTeams_() {
   return sortTeams_(nodes);
 }
 
-function linearCreateIssue_(teamId, title, description, priority) {
+function linearCreateIssue_(teamId, title, description, priority, dueDate) {
   const mutation = `
     mutation CreateIssue($input: IssueCreateInput!) {
       issueCreate(input: $input) {
         success
-        issue { id identifier url title }
+        issue { id, url }
       }
     }
   `;
@@ -568,6 +570,9 @@ function linearCreateIssue_(teamId, title, description, priority) {
   // Only add priority to the input if it's a valid number and not "No Priority" (0)
   if (!isNaN(priority) && priority > 0) {
     input.priority = priority;
+  }
+  if (dueDate) {
+    input.dueDate = dueDate;
   }
   
   return linearRequest_(mutation, { input });
@@ -623,3 +628,4 @@ function getApiKey_() {
 function getDefaultTeamId_() {
   return USER_PROPS.getProperty(PROP_DEFAULT_TEAM_ID);
 }
+
