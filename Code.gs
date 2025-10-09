@@ -113,7 +113,8 @@ function buildIssueComposerCard_(msg) {
   const priorityInput = buildPrioritySelector_();
   const dueDateInput = CardService.newDatePicker()
     .setFieldName("dueDate")
-    .setTitle("Due Date");
+    .setTitle("Due Date")
+    .setValueInMsSinceEpoch(new Date().getTime());
 
   // Pass message/thread IDs to the action as parameters
   const createAction = CardService.newAction()
